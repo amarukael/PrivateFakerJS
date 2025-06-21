@@ -1,38 +1,80 @@
 import { faker } from "@faker-js/faker/locale/id_ID";
+import { APIError } from './errors.js';
 
-export function generateCategoryData(categoryName,) {
-    console.log("Searching by " + categoryName)
-
+export function generateCategoryData(categoryName, query = {}) {
+    validateInput(categoryName);
+    
     const category = faker[categoryName];
-    const result = {};
-    const errorfield = {};
-
     if (!category) {
-        return { error: `Kategori '${categoryName}' tidak ditemukan.` };
+        throw new APIError(`Category '${categoryName}' not found`, 404);
     }
 
-    for (const key of Object.keys(category)) {
-        const fn = category[key];
+    const dataSize = getValidatedDataSize(query.data_size);
+    console.log(`Generating data for category: ${categoryName}, size: ${dataSize}`);
 
-        if (typeof fn === 'function') {
-            try {
-                const args = [];
+    return dataSize > 1 
+        ? generateMultipleItems(category, query, dataSize)
+        : generateSingleItem(category, query);
+}
 
-                for (let i = 0; i < fn.length; i++) {
-                    const param = query[`arg${i + 1}`];
-                    args.push(param !== undefined ? param : undefined);
-                }
+function validateInput(categoryName) {
+    if (!categoryName || typeof categoryName !== 'string') {
+        throw new APIError('Invalid category name', 400);
+    }
+}
 
-                const value = fn(...args);
-                result[key] = value;
-            } catch (err) {
-                errorfield[key] = err.message;
-            }
-        }
-        if (Object.keys(errorfield).length !== 0) {
-            result["error"] = errorfield
-        }
+function getValidatedDataSize(inputSize) {
+    const size = parseInt(inputSize, 10);
+    return isNaN(size) || size <= 0 ? 1 : size;
+}
+
+function generateSingleItem(category, query) {
+    const result = {};
+    const errors = {};
+
+    Object.keys(category).forEach(key => {
+        processFunction(category[key], key, result, errors, query);
+    });
+
+    return addErrorsToResult(result, errors);
+}
+
+function generateMultipleItems(category, query, count) {
+    const result = { data: [] };
+    const errors = {};
+
+    for (let i = 0; i < count; i++) {
+        const item = {};
+        Object.keys(category).forEach(key => {
+            processFunction(category[key], key, item, errors, query);
+        });
+        result.data.push(item);
     }
 
+    return addErrorsToResult(result, errors);
+}
+
+function processFunction(fn, key, targetObj, errors, query) {
+    if (typeof fn === 'function') {
+        try {
+            targetObj[key] = executeFunction(fn, query);
+        } catch (error) {
+            errors[key] = error.message;
+        }
+    }
+}
+
+function executeFunction(fn, query) {
+    const args = [];
+    for (let i = 0; i < fn.length; i++) {
+        args.push(query[`arg${i + 1}`]);
+    }
+    return fn(...args);
+}
+
+function addErrorsToResult(result, errors) {
+    if (Object.keys(errors).length > 0) {
+        result.errors = errors;
+    }
     return result;
 }

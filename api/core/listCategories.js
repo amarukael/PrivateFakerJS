@@ -1,24 +1,25 @@
 import { faker } from "@faker-js/faker/locale/id_ID";
+import { APIError } from './errors.js';
 
 export function listCategories() {
-    const categories = [];
+    try {
+        const categories = Object.keys(faker)
+            .filter(categoryName => {
+                const category = faker[categoryName];
+                return typeof category === 'object' && 
+                       hasMethods(category);
+            });
 
-    for (const categoryName of Object.keys(faker)) {
-        const category = faker[categoryName];
-        if (typeof category !== 'object') continue;
-
-        // Cek apakah kategori memiliki method (fungsi)
-        const hasMethods = Object.keys(category).some(
-            key => typeof category[key] === 'function'
-        );
-
-        if (hasMethods) {
-            categories.push(categoryName);
-        }
+        return {
+            locale: 'id_ID',
+            count: categories.length,
+            categories
+        };
+    } catch (error) {
+        throw new APIError('Failed to list categories', 500, { originalError: error.message });
     }
+}
 
-    return {
-        locale: 'id_ID',
-        categories
-    };
+function hasMethods(obj) {
+    return Object.values(obj).some(value => typeof value === 'function');
 }
